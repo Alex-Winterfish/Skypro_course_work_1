@@ -1,5 +1,8 @@
 import pathlib
+from calendar import month
+
 import pandas as pd
+from datetime import datetime, date, time
 
 file_path = '../data/operations.xlsx'
 def get_data(filepath: str):
@@ -17,9 +20,38 @@ def get_data(filepath: str):
         ):  # цикл для добавления словарй с транзакциями в список
             output_list.append(values)
 
-        return pd.DataFrame(output_list)
+        dataframe = pd.DataFrame(output_list)
+
+        return dataframe
     except FileNotFoundError:
         return f"Файл по адресу {filepath} не найден"
+
+
+
+
+def date_split(data_frame, user_date = '09.03.2020', period='M'):
+    '''Функция принимает дату от пользоватеял и необязательный аргумент - диапазон по дате'''
+    user_date = datetime.strptime(user_date, '%d.%m.%Y')
+    if period=='M': #устанавливаем период за месяц даты пользователя
+        period_date = datetime(user_date.year,user_date.month,1)
+    elif period == 'W': #устанавливаем период за неделю даты пользователя
+        day_period = 7 - user_date.weekday()
+        period_date = datetime(user_date.year,user_date.month,day_period)
+    elif period == 'Y':  #устанаваливаем предел за год даты пользователя
+        period_date = datetime(user_date.year,1,1)
+    elif period == 'ALL': # все транзакции до даты пользователя
+        period_date = datetime.strptime(data_frame.loc[:,'Дата операции'][len(data_frame)-3][0:10], '%d.%m.%Y')
+
+    i=0
+    while datetime.strptime(data_frame.loc[:,'Дата операции'][i][0:10], '%d.%m.%Y') > user_date:
+        i+=1
+    j=0
+    while  datetime.strptime(data_frame.loc[:,'Дата операции'][j][0:10], '%d.%m.%Y') >= period_date:
+        j+=1
+    return data_frame.iloc[i:j]
+
+
+
 
 
 
@@ -58,7 +90,7 @@ def sort_spending(data:dict):
     expenses_summ = sum(processed_data[i][1] for i in range(len(processed_data)) if processed_data[i][1]<0)*-1
 
     smaller_amount = sum(processed_data[i][1] for i in range(7,len(processed_data)) if processed_data[i][1]<0)*-1
-
+    #здесь нужно отловить исключение out of range если список трат короче 7
     main_expenses = [{'category':processed_data[i][0],'amount':round(processed_data[i][1]*-1)} for i in range(7)] + [{'category':'Остальное', 'amount':round(smaller_amount)}]
 
     answer_dict = dict()
@@ -80,9 +112,10 @@ def sort_spending(data:dict):
 
 if __name__ == "__main__":
     dataframe = get_data(file_path)
+    data_sort_by = date_split(dataframe,period='M')
+    pro_data = get_spending(data_sort_by)
 
-    pro_data = get_spending(dataframe)
+    pro_data1 = sort_spending(pro_data)
 
-    #print(pro_data)
+    print(pro_data1)
 
-    print(sort_spending(pro_data))
