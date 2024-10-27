@@ -78,8 +78,10 @@ def get_spending(data_frame)->list:
                 continue
         return_df[category_list[j]] = summ
 
-
     return return_df
+
+
+
 
 def sort_spending(data:dict):
     "Принимает словарь с парми Категория:Сумма платежа, возврщает вормат json, где траты разбиты по категориям"
