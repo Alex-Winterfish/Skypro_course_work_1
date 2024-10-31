@@ -1,11 +1,12 @@
-import pathlib
-from calendar import month
+import json
 
 import pandas as pd
-from datetime import datetime, date, time
+from datetime import datetime
+
+from src.external_api import amount_exchange, stock_value, get_user_stock
 
 file_path = '../data/operations.xlsx'
-def get_data(filepath: str):
+def get_data(filepath: str)->pd.DataFrame:
     """Функция принимает путь к файлу xls и возвращает список словарей с транзакциями"""
 
     try:
@@ -29,8 +30,9 @@ def get_data(filepath: str):
 
 
 
-def date_split(data_frame, user_date = '09.03.2020', period='M'):
-    '''Функция принимает дату от пользоватеял и необязательный аргумент - диапазон по дате'''
+def date_split(data_frame, user_date, period='M'):
+    '''Функция принимает дату от пользоватеял и необязательный аргумент - диапазон по дате
+    Возвращает дата фрейм с транзакциями в заданном временном диапазоне'''
     user_date = datetime.strptime(user_date, '%d.%m.%Y')
     if period=='M': #устанавливаем период за месяц даты пользователя
         period_date = datetime(user_date.year,user_date.month,1)
@@ -84,37 +86,76 @@ def get_spending(data_frame)->list:
 
 
 def sort_spending(data:dict):
-    "Принимает словарь с парми Категория:Сумма платежа, возврщает вормат json, где траты разбиты по категориям"
+    "Принимает словарь с парми Категория:Сумма платежа, возвращает json, где траты разбиты по категориям"
     output_data = dict
 
     processed_data = sorted(data.items(), key=lambda value: value[1], reverse=False)
-    TEST_DICT = dict(processed_data)
+
     expenses_summ = sum(processed_data[i][1] for i in range(len(processed_data)) if processed_data[i][1]<0)*-1
 
-    smaller_amount = sum(processed_data[i][1] for i in range(7,len(processed_data)) if processed_data[i][1]<0)*-1
-    #здесь нужно отловить исключение out of range если список трат короче 7
-    main_expenses = [{'category':processed_data[i][0],'amount':round(processed_data[i][1]*-1)} for i in range(7)] + [{'category':'Остальное', 'amount':round(smaller_amount)}]
+    expenses_list = [processed_data[i] for i in range(len(processed_data)) if processed_data[i][1]<0] #определяем список с расходами
+
+    if len(expenses_list) > 7: #проверяем длину списка расходов
+
+        smaller_amount = sum(expenses_list[i][1] for i in range(7,len(expenses_list)))*-1
+        main_expenses = [{'category':expenses_list[i][0],'amount':round(expenses_list[i][1]*-1)} for i in range(7)] + [{'category':'Остальное', 'amount':round(smaller_amount)}]
+
+    else:
+        main_expenses = [{'category': expenses_list[i][0], 'amount': round(expenses_list[i][1] * -1)} for i in
+                         range(len(expenses_list))] + [{'category': 'Остальное', 'amount': 0}]
 
     answer_dict = dict()
     expenses = dict()
+    income = dict()
+    cash = dict()
+    transfers = dict()
+
+
     expenses['total_amount'] = round(expenses_summ)
     expenses['main'] = main_expenses
 
-    processed_data = sorted(data.items(), key=lambda value: value[1], reverse=True)
-
     income_summ = sum(processed_data[i][1] for i in range(len(processed_data)) if processed_data[i][1]>0)
 
-    income = [{'category':processed_data[i][0],'amount':round(processed_data[i][1])} for i in range(len(processed_data)) if processed_data[i][1]>0]
-    answer_dict['exepenses'] = expenses
+    main_income = [{'category':processed_data[i][0],'amount':round(processed_data[i][1])} for i in range(len(processed_data)) if processed_data[i][1]>0]
+    main_income = main_income[::-1]
+
+    income['total_amount'] = income_summ
+    income['main'] = main_income
+
+    cash['category'] = 'Наличные'
+    cash['amount'] = round(data.get('Наличные', 0))
+
+    transfers['category'] = 'Переводы'
+    transfers['amount'] = round(data.get('Переводы', 0))
+
+
+    answer_dict['expenses'] = expenses
+    answer_dict['transfers_and_cash'] = [cash, transfers]
     answer_dict['income'] = income
+    currency_rate = amount_exchange()
+    answer_dict['currency_rate'] = currency_rate
+
+    stocks = get_user_stock()
+
+    stock_list = list()
+
+    for stock in stocks:
+        stock_data = stock_value(stock)
+        stock_list.append(stock_data)
+
+    answer_dict['stock_prices'] = stock_list
+
+    json_answer = json.dumps(answer_dict, ensure_ascii=False)
 
 
-    return answer_dict
+    return json_answer
+
+
 
 
 if __name__ == "__main__":
     dataframe = get_data(file_path)
-    data_sort_by = date_split(dataframe,period='M')
+    data_sort_by = date_split(dataframe, '20.03.2018',period='ALL')
     pro_data = get_spending(data_sort_by)
 
     pro_data1 = sort_spending(pro_data)
